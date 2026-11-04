@@ -4,6 +4,8 @@
   "description": "MCP server for Chrome DevTools",
   "type": "module",
   "bin": {
+    "chrome-devtools-mcp-http": "./build/src/bin/chrome-devtools-mcp-http.js",
+    "chrome-devtools-mcp-shared": "./build/src/bin/chrome-devtools-mcp-shared.js",
     "chrome-devtools-mcp": "./build/src/bin/chrome-devtools-mcp.js",
     "chrome-devtools": "./build/src/bin/chrome-devtools.js"
   },
@@ -36,6 +38,7 @@
     "eval": "npm run build && node scripts/eval_gemini.ts",
     "count-tokens": "node scripts/count_tokens.ts",
     "profile": "npm run build && node scripts/profile/profile_mcp.ts",
+    "profile:low-memory": "npm run build && node scripts/profile/low_memory.ts",
     "test:memory": "npm run build && node scripts/profile/profile_mcp.ts --threshold-percentage 1"
   },
   "files": [

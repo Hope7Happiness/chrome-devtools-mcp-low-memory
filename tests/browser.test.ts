@@ -39,15 +39,8 @@ async function runWithRetry(fn: () => Promise<void>) {
   let lastError: Error | undefined;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await Promise.race([
-        fn(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error('Test execution timeout exceeded')),
-            20000,
-          ),
-        ),
-      ]);
+      // The runner bounds the case; await cleanup before another browser attempt.
+      await fn();
       return;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
@@ -868,16 +861,9 @@ describe('browser', () => {
     const server = serverHooks();
 
     it('blocks URLs in blocklist', async () => {
+      server.addHtmlRoute('/allowed.html', '<html><body>Allowed</body></html>');
+      server.addHtmlRoute('/blocked.html', '<html><body>Blocked</body></html>');
       await runWithRetry(async () => {
-        server.addHtmlRoute(
-          '/allowed.html',
-          '<html><body>Allowed</body></html>',
-        );
-        server.addHtmlRoute(
-          '/blocked.html',
-          '<html><body>Blocked</body></html>',
-        );
-
         const manager = new BrowserManager(
           createMockServerConfig({
             headless: true,
@@ -913,16 +899,9 @@ describe('browser', () => {
     });
 
     it('blocks URLs not in allowlist', async () => {
+      server.addHtmlRoute('/allowed.html', '<html><body>Allowed</body></html>');
+      server.addHtmlRoute('/blocked.html', '<html><body>Blocked</body></html>');
       await runWithRetry(async () => {
-        server.addHtmlRoute(
-          '/allowed.html',
-          '<html><body>Allowed</body></html>',
-        );
-        server.addHtmlRoute(
-          '/blocked.html',
-          '<html><body>Blocked</body></html>',
-        );
-
         const manager = new BrowserManager(
           createMockServerConfig({
             headless: true,

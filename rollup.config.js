@@ -423,6 +423,7 @@ export default [
         './lighthouse-devtools-mcp-bundle.js',
         // The CLI client loads only this small bundle. See src/third_party/cli.ts.
         './cli.js',
+        './shared.js',
       ];
 
       if (existingExternals.includes(source)) {
@@ -433,6 +434,13 @@ export default [
   ),
   bundleDependency(
     'cli.js',
+    {
+      inlineDynamicImports: true,
+    },
+    (_source, _importer, _isResolved) => false,
+  ),
+  bundleDependency(
+    'shared.js',
     {
       inlineDynamicImports: true,
     },

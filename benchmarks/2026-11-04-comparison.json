@@ -1,0 +1,184 @@
+{
+  "measuredAt": "2026-11-04T18:50:36.666Z",
+  "platform": "darwin",
+  "arch": "arm64",
+  "node": "v25.9.0",
+  "targetTotalMcpMiB": 200,
+  "workload": {
+    "clients": 8,
+    "pages": 2,
+    "requestsPerPage": 250,
+    "logsPerPage": 1000,
+    "logCharacters": 2000,
+    "idleSeconds": 65
+  },
+  "notes": "Synthetic isolated Chrome; Chrome memory excluded. macOS proc_pid_rusage reports physical footprint including compressed memory and its lifetime peak. No forced GC or V8 heap limit.",
+  "results": [
+    {
+      "lowMemory": false,
+      "transport": "shared-stdio",
+      "samples": [
+        {
+          "stage": "connected",
+          "backendRssMiB": 40.9,
+          "backendHeapUsedMiB": 50.9,
+          "backendMaxRssMiB": 126.3,
+          "backendFootprintMiB": 112.2,
+          "backendPeakFootprintMiB": 112.2,
+          "frontendFootprintMiB": [
+            46.1, 46.3, 46.5, 45.6, 46.3, 46, 46.2, 45.8
+          ],
+          "totalFootprintMiB": 481
+        },
+        {
+          "stage": "listed",
+          "backendRssMiB": 50.6,
+          "backendHeapUsedMiB": 54.2,
+          "backendMaxRssMiB": 126.3,
+          "backendFootprintMiB": 112.9,
+          "backendPeakFootprintMiB": 112.9,
+          "frontendFootprintMiB": [
+            46.2, 46.3, 46.5, 45.6, 46.3, 46, 46.2, 45.8
+          ],
+          "totalFootprintMiB": 481.8
+        },
+        {
+          "stage": "worked-page-1",
+          "backendRssMiB": 94.5,
+          "backendHeapUsedMiB": 64.3,
+          "backendMaxRssMiB": 126.3,
+          "backendFootprintMiB": 156.5,
+          "backendPeakFootprintMiB": 156.5,
+          "frontendFootprintMiB": [
+            46.3, 46.3, 46.5, 45.6, 46.3, 46, 46.2, 45.8
+          ],
+          "totalFootprintMiB": 525.5
+        },
+        {
+          "stage": "worked-page-2",
+          "backendRssMiB": 52.6,
+          "backendHeapUsedMiB": 89.7,
+          "backendMaxRssMiB": 126.3,
+          "backendFootprintMiB": 167.2,
+          "backendPeakFootprintMiB": 167.2,
+          "frontendFootprintMiB": [
+            46.3, 46.6, 46.5, 45.6, 46.3, 46, 46.2, 45.8
+          ],
+          "totalFootprintMiB": 536.5
+        },
+        {
+          "stage": "all-clients-used-both-pages",
+          "backendRssMiB": 126.7,
+          "backendHeapUsedMiB": 111.3,
+          "backendMaxRssMiB": 144,
+          "backendFootprintMiB": 224.5,
+          "backendPeakFootprintMiB": 224.5,
+          "frontendFootprintMiB": [
+            46.4, 46.7, 46.7, 45.9, 46.5, 46.3, 46.5, 46.1
+          ],
+          "totalFootprintMiB": 595.6
+        },
+        {
+          "stage": "idle-after-ttl",
+          "backendRssMiB": 14.9,
+          "backendHeapUsedMiB": 111.5,
+          "backendMaxRssMiB": 144,
+          "backendFootprintMiB": 224.6,
+          "backendPeakFootprintMiB": 224.6,
+          "frontendFootprintMiB": [
+            45.3, 45.2, 45.2, 44.5, 44.8, 45, 44.9, 44.6
+          ],
+          "totalFootprintMiB": 584.1
+        },
+        {
+          "stage": "closed",
+          "backendRssMiB": 44.6,
+          "backendHeapUsedMiB": 112.1,
+          "backendMaxRssMiB": 144,
+          "backendFootprintMiB": 225.3,
+          "backendPeakFootprintMiB": 225.3,
+          "frontendFootprintMiB": [
+            45.5, 45.2, 45.2, 44.5, 44.8, 45, 44.9, 44.6
+          ],
+          "totalFootprintMiB": 585
+        }
+      ]
+    },
+    {
+      "lowMemory": true,
+      "transport": "direct-http",
+      "samples": [
+        {
+          "stage": "connected",
+          "backendRssMiB": 150.9,
+          "backendHeapUsedMiB": 58.3,
+          "backendMaxRssMiB": 150.9,
+          "backendFootprintMiB": 115.5,
+          "backendPeakFootprintMiB": 115.5,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 115.5
+        },
+        {
+          "stage": "listed",
+          "backendRssMiB": 130.3,
+          "backendHeapUsedMiB": 60,
+          "backendMaxRssMiB": 151.2,
+          "backendFootprintMiB": 116,
+          "backendPeakFootprintMiB": 116,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 116
+        },
+        {
+          "stage": "worked-page-1",
+          "backendRssMiB": 141.9,
+          "backendHeapUsedMiB": 67,
+          "backendMaxRssMiB": 151.2,
+          "backendFootprintMiB": 154.9,
+          "backendPeakFootprintMiB": 154.9,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 154.9
+        },
+        {
+          "stage": "worked-page-2",
+          "backendRssMiB": 121.5,
+          "backendHeapUsedMiB": 71.7,
+          "backendMaxRssMiB": 151.2,
+          "backendFootprintMiB": 163.7,
+          "backendPeakFootprintMiB": 163.7,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 163.7
+        },
+        {
+          "stage": "all-clients-used-both-pages",
+          "backendRssMiB": 160.7,
+          "backendHeapUsedMiB": 92.6,
+          "backendMaxRssMiB": 160.7,
+          "backendFootprintMiB": 203.9,
+          "backendPeakFootprintMiB": 203.9,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 203.9
+        },
+        {
+          "stage": "idle-after-ttl",
+          "backendRssMiB": 24.9,
+          "backendHeapUsedMiB": 71.9,
+          "backendMaxRssMiB": 160.8,
+          "backendFootprintMiB": 125.8,
+          "backendPeakFootprintMiB": 215,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 125.8
+        },
+        {
+          "stage": "closed",
+          "backendRssMiB": 50.8,
+          "backendHeapUsedMiB": 72.2,
+          "backendMaxRssMiB": 160.8,
+          "backendFootprintMiB": 127.1,
+          "backendPeakFootprintMiB": 215,
+          "frontendFootprintMiB": [],
+          "totalFootprintMiB": 127.1
+        }
+      ]
+    }
+  ]
+}

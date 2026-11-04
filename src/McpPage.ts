@@ -5,6 +5,7 @@
  */
 
 import type {ReadonlyServerConfig} from './config/ServerConfig.js';
+import {LOW_MEMORY_POLICY} from './collectors/memoryPolicy.js';
 import {DevToolsCommentBridge} from './devtools/DevToolsCommentBridge.js';
 import {
   createTargetUniverse,
@@ -369,7 +370,15 @@ export class McpPage implements ContextPage {
       this.#pptrPage = page;
       page.on('dialog', this.#dialogHandler);
       this.#networkCollector = new NetworkCollector(page, {
-        maxNavigationSaved: this.#config.resolved.maxNavigationSaved,
+        maxNavigationSaved: this.#config.resolved.lowMemory
+          ? LOW_MEMORY_POLICY.maxNavigationSaved
+          : this.#config.resolved.maxNavigationSaved,
+        ...(this.#config.resolved.lowMemory
+          ? {
+              maxResourcesPerNavigation: LOW_MEMORY_POLICY.maxNetworkRequests,
+              maxResourceAgeMs: LOW_MEMORY_POLICY.maxResourceAgeMs,
+            }
+          : {}),
       });
       this.#consoleCollector = new ConsoleCollector(
         page,
@@ -386,7 +395,17 @@ export class McpPage implements ContextPage {
             },
           };
         },
-        {maxNavigationSaved: this.#config.resolved.maxNavigationSaved},
+        {
+          maxNavigationSaved: this.#config.resolved.lowMemory
+            ? LOW_MEMORY_POLICY.maxNavigationSaved
+            : this.#config.resolved.maxNavigationSaved,
+          ...(this.#config.resolved.lowMemory
+            ? {
+                maxResourcesPerNavigation: LOW_MEMORY_POLICY.maxConsoleMessages,
+                maxResourceAgeMs: LOW_MEMORY_POLICY.maxResourceAgeMs,
+              }
+            : {}),
+        },
       );
     }
     this.updateTimeouts();
@@ -412,7 +431,8 @@ export class McpPage implements ContextPage {
     try {
       const session = await this.pptrPage.createCDPSession();
       this.#devtoolsUniverse = await createTargetUniverse(session, {
-        sourceMaps: this.#config.resolved.sourceMaps,
+        sourceMaps:
+          !this.#config.resolved.lowMemory && this.#config.resolved.sourceMaps,
       });
     } catch (e) {
       logger?.('Failed to initialize DevTools universe', e);
@@ -423,7 +443,8 @@ export class McpPage implements ContextPage {
     if (!this.#devtoolsUniverse) {
       return;
     }
-    const sourceMaps = this.#config.resolved.sourceMaps;
+    const sourceMaps =
+      !this.#config.resolved.lowMemory && this.#config.resolved.sourceMaps;
     this.#devtoolsUniverse.universe.settings
       .resolve(DevTools.SDKSettings.jsSourceMapsEnabledSettingDescriptor)
       .set(sourceMaps);

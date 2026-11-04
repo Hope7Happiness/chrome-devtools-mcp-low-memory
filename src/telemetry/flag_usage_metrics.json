@@ -490,5 +490,17 @@
   {
     "name": "category_webauthn",
     "flagType": "boolean"
+  },
+  {
+    "name": "low_memory_present",
+    "flagType": "boolean"
+  },
+  {
+    "name": "low_memory",
+    "flagType": "boolean"
+  },
+  {
+    "name": "shared_http_port_present",
+    "flagType": "boolean"
   }
 ]

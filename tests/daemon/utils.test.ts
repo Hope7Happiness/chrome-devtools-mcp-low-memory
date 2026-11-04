@@ -22,6 +22,7 @@ import {
   assertValidSessionId,
   getSocketPath,
   getRuntimeHome,
+  getStateHome,
   getPidFilePath,
   getDaemonPid,
   isDaemonRunning,
@@ -60,6 +61,39 @@ describe('assertValidSessionId', () => {
       () => assertValidSessionId('session@id'),
       /Invalid sessionId/,
     );
+  });
+});
+
+describe('getStateHome', () => {
+  it('uses persistent XDG state storage and validates session IDs', () => {
+    const previous = process.env.XDG_STATE_HOME;
+    try {
+      process.env.XDG_STATE_HOME = path.join(os.tmpdir(), 'state-test');
+      assert.strictEqual(
+        getStateHome(SESSION_ID),
+        path.join(process.env.XDG_STATE_HOME, APP_NAME, SESSION_ID),
+      );
+      assert.throws(() => getStateHome('../other'), /Invalid sessionId/);
+      delete process.env.XDG_STATE_HOME;
+      sinon.stub(os, 'homedir').returns(path.join(os.tmpdir(), 'mock-home'));
+      assert.strictEqual(
+        getStateHome(''),
+        path.join(
+          os.tmpdir(),
+          'mock-home',
+          '.local',
+          'state',
+          APP_NAME,
+          'default',
+        ),
+      );
+    } finally {
+      if (previous === undefined) {
+        delete process.env.XDG_STATE_HOME;
+      } else {
+        process.env.XDG_STATE_HOME = previous;
+      }
+    }
   });
 });
 

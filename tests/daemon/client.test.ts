@@ -38,6 +38,21 @@ describe('daemon client', () => {
   });
 
   describe('start/stop', () => {
+    it('reports a daemon exiting during startup and removes its PID file', async () => {
+      await assert.rejects(
+        startDaemon(['--shared-http-port=-1'], sessionId),
+        /exited (before|during)/,
+      );
+      assert.strictEqual(isDaemonRunning(sessionId), false);
+    });
+
+    it('reaps its own child when daemon startup times out', async () => {
+      await assert.rejects(
+        startDaemon([], sessionId, {timeoutMs: 1}),
+        /Timeout/,
+      );
+      assert.strictEqual(isDaemonRunning(sessionId), false);
+    });
     it('should start and stop daemon', async () => {
       assert.ok(
         !isDaemonRunning(sessionId),

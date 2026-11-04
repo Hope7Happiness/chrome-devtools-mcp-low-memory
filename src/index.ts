@@ -9,6 +9,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 import {BrowserManager} from './BrowserManager.js';
+import {ClientSessions} from './daemon/ClientSessions.js';
 import {ConfigParser} from './config/ConfigParser.js';
 import {ConfigWatcher} from './config/ConfigWatcher.js';
 import {
@@ -30,6 +31,9 @@ import {
   type Root,
   type Transport,
   puppeteer,
+  isSpecType,
+  zod,
+  type Tool,
 } from './third_party/index.js';
 import {ToolHandler} from './ToolHandler.js';
 import type {AnyToolDefinition} from './tools/ToolDefinition.js';
@@ -67,6 +71,7 @@ export class McpServer {
   #config: ServerConfig;
   #browserManager: BrowserManager;
   #context: McpContext;
+  #clientSessions: ClientSessions;
   /** Runs every tool call and config reload. */
   #taskRunner = new TaskRunner();
   #heapSnapshotManager = new HeapSnapshotManager(this.#taskRunner);
@@ -122,6 +127,7 @@ export class McpServer {
       getBrowser: () => this.#browserManager.ensureBrowser(),
     });
     this.#context.setRoots(this.#combinedRoots());
+    this.#clientSessions = new ClientSessions(this.#context);
 
     this.server.server.setRequestHandler('logging/setLevel', () => {
       return {};
@@ -179,6 +185,54 @@ export class McpServer {
       };
     }
     return await toolHandler.handle(args);
+  }
+
+  async callToolForClient(
+    clientId: string,
+    name: string,
+    args: Record<string, unknown> = {},
+    roots?: Root[],
+  ): Promise<CallToolResult> {
+    return await this.#clientSessions.run(
+      clientId,
+      [...(roots ?? []), ...(this.#combinedRoots() ?? [])],
+      () => this.callTool(name, args),
+    );
+  }
+
+  listTools(): Tool[] {
+    const definitions = new Map(
+      createTools(this.#config.resolved).map(tool => [tool.name, tool]),
+    );
+    const tools: Tool[] = [];
+    for (const [name, entry] of this.#tools) {
+      const definition = definitions.get(name);
+      if (entry.handler.disabled || !definition) {
+        continue;
+      }
+      const candidate: unknown = {
+        name,
+        description: definition.description,
+        annotations: {
+          readOnlyHint: definition.annotations.readOnlyHint,
+          ...(definition.annotations.title
+            ? {title: definition.annotations.title}
+            : {}),
+        },
+        inputSchema: {
+          ...zod.toJSONSchema(entry.handler.registeredInputSchema, {
+            io: 'input',
+            unrepresentable: 'any',
+          }),
+          type: 'object',
+        },
+      };
+      if (!isSpecType.Tool(candidate)) {
+        throw new Error(`Invalid tool schema: ${name}`);
+      }
+      tools.push(candidate);
+    }
+    return tools;
   }
 
   /**
@@ -292,6 +346,7 @@ export class McpServer {
    * Closes the MCP connection and disposes internal context/listeners.
    */
   async close(): Promise<void> {
+    this.#clientSessions.dispose();
     this.#configWatcher?.dispose();
     this.#configWatcher = undefined;
     try {

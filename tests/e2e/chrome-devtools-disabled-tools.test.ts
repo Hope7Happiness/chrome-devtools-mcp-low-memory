@@ -8,9 +8,10 @@ import assert from 'node:assert';
 import {describe, it} from 'node:test';
 
 import {createCliSession, runCli} from '../utils.js';
+import {e2eConcurrency} from '../setup.js';
 
 // Each test uses its own daemon session, so the tests run in parallel.
-describe('chrome-devtools', {concurrency: true}, () => {
+describe('chrome-devtools', {concurrency: e2eConcurrency}, () => {
   it('fails to invoke list_network_requests when categoryNetwork is disabled', async t => {
     const sessionId = createCliSession(t);
     await runCli(['start', '--categoryNetwork=false'], sessionId);

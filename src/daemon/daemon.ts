@@ -22,14 +22,20 @@ import {McpServer} from '../index.js';
 import {ClearcutLogger} from '../telemetry/ClearcutLogger.js';
 import {computeFlagUsage} from '../telemetry/flagUtils.js';
 import {PipeTransport} from '../third_party/index.js';
-import {logger, puppeteerLogger, saveLogsToFile} from '../utils/logger.js';
+import {logger, saveLogsToFile} from '../utils/logger.js';
 import {setupUnhandledRejectionHandler} from '../utils/errorHandling.js';
 import {VERSION} from '../version.js';
+import {
+  getHttpToken,
+  startSharedHttp,
+  type SharedHttpService,
+} from './sharedHttp.js';
 
 import type {DaemonMessage, DaemonStatusResult} from './types.js';
 import {
   DAEMON_CLIENT_NAME,
   getPidFilePath,
+  getStateHome,
   getSocketPath,
   IS_WINDOWS,
   isDaemonRunning,
@@ -137,6 +143,8 @@ const mcpServerArgs = process.argv.slice(2);
 
 let mcpServer: McpServer | null = null;
 let server: Server | null = null;
+let httpService: SharedHttpService | undefined;
+let httpTokenFile: string | undefined;
 
 async function setupMCPServer(): Promise<void> {
   logger?.(`Starting Chrome DevTools MCP Server v${VERSION}`);
@@ -151,6 +159,21 @@ async function setupMCPServer(): Promise<void> {
     browserManager,
     logFile,
   });
+  if (args.sharedHttpPort !== undefined) {
+    httpTokenFile = path.join(getStateHome(sessionId), 'http-token');
+    httpService = await startSharedHttp({
+      port: args.sharedHttpPort,
+      token: await getHttpToken(httpTokenFile),
+      send: async message => {
+        const response = await handleRequest(message);
+        return {
+          success: response.success,
+          result: response.result ?? '',
+          error: response.error,
+        };
+      },
+    });
+  }
   if (args.watchConfig) {
     mcpServer.watchConfig();
   }
@@ -173,11 +196,26 @@ async function handleRequest(msg: DaemonMessage): Promise<{
       }
       const {tool, args} = msg;
 
-      const result = await mcpServer.callTool(tool, args);
+      const result = await mcpServer.callToolForClient(
+        msg.clientId ?? 'legacy-cli',
+        tool,
+        args,
+        msg.roots,
+      );
 
       return {
         success: true,
         result: JSON.stringify(result),
+      };
+    }
+    if (msg.method === 'list_tools') {
+      await started;
+      if (!mcpServer) {
+        throw new Error('MCP server not initialized');
+      }
+      return {
+        success: true,
+        result: JSON.stringify({tools: mcpServer.listTools()}),
       };
     }
     if (msg.method === 'stop') {
@@ -200,6 +238,10 @@ async function handleRequest(msg: DaemonMessage): Promise<{
         startDate: startDate.toISOString(),
         version: VERSION,
         args: mcpServerArgs,
+        memory: process.memoryUsage(),
+        maxRssBytes: process.resourceUsage().maxRSS * 1024,
+        httpUrl: httpService?.url,
+        httpTokenFile,
       };
       return {
         success: true,
@@ -233,9 +275,9 @@ async function startSocketServer(): Promise<void> {
 
   return await new Promise<void>((resolve, reject) => {
     server = createServer(socket => {
-      const transport = new PipeTransport(socket, socket, puppeteerLogger);
+      const transport = new PipeTransport(socket, socket, () => undefined);
       transport.onmessage = async (message: string) => {
-        logger?.('onmessage', message);
+        logger?.('Received daemon message');
         const response = await handleRequest(JSON.parse(message));
         transport.send(JSON.stringify(response));
         socket.end();
@@ -280,6 +322,7 @@ async function cleanup(exitCode = 0): Promise<void> {
   console.log('Cleaning up daemon...');
 
   try {
+    await httpService?.close();
     await mcpServer?.close();
   } catch (error) {
     logger?.('Error closing MCP server:', error);

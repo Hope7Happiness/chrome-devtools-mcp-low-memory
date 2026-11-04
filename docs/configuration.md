@@ -219,6 +219,15 @@ The Chrome DevTools MCP server supports the following configuration option:
   - **Type:** boolean
   - **Default:** `true`
 
+- **`--lowMemory`/ `--low-memory`**
+  Use lazy page discovery, disable source maps, and retain at most one navigation, 100 requests and 200 console messages per page for 60 seconds. Direct shared HTTP clients target 200 MiB combined MCP memory; stdio frontends add their own memory. This is not a hard process limit.
+  - **Type:** boolean
+  - **Default:** `false`
+
+- **`--sharedHttpPort`/ `--shared-http-port`**
+  Serve shared MCP sessions on 127.0.0.1 at this port (0 selects an available port). Clients connect directly without per-pane stdio processes. Requires the private bearer token stored in the persistent user state directory.
+  - **Type:** number
+
 - **`--sourceMaps`/ `--source-maps`**
   Whether to enable source maps in DevTools. Use --no-source-maps to disable.
   - **Type:** boolean

@@ -10,6 +10,7 @@ import type {Readable, Writable} from 'node:stream';
 import {describe, it} from 'node:test';
 
 import {executablePath} from 'puppeteer';
+import {e2eConcurrency} from './setup.js';
 
 type Server = ChildProcessByStdio<Writable, Readable, Readable>;
 
@@ -169,7 +170,7 @@ async function setupServerWithRetry(): Promise<Server> {
 
 // Each test starts its own server and Chrome, so the tests run in parallel.
 // The budget only measures the time from the signal to the process exit.
-describe('shutdown', {concurrency: true}, () => {
+describe('shutdown', {concurrency: e2eConcurrency}, () => {
   it('exits within budget on stdin EOF after Chrome launch', async () => {
     const child = await setupServerWithRetry();
     child.stdin.end();

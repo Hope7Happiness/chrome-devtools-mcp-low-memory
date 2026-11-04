@@ -63,6 +63,7 @@ export type ListenerMap<EventMap extends PageEvents = PageEvents> = {
 export interface PageCollectorOptions {
   maxResourcesPerNavigation?: number;
   maxNavigationSaved?: number;
+  maxResourceAgeMs?: number;
 }
 
 export class PageCollector<T> {
@@ -71,6 +72,9 @@ export class PageCollector<T> {
   #pendingSameDocumentNavigation = false;
   #frameNavigatedWithinDocumentTarget?: Frame;
   protected readonly maxNavigationSaved: number;
+  #collectedAt = new WeakMap<WithSymbolId<T>, number>();
+  #expiryTimer?: ReturnType<typeof setInterval>;
+  #maxResourceAgeMs: number;
 
   /**
    * This maps a Page to a list of navigations with a sub-list
@@ -85,10 +89,19 @@ export class PageCollector<T> {
     {
       maxResourcesPerNavigation,
       maxNavigationSaved = DEFAULT_MAX_NAVIGATION_SAVED,
+      maxResourceAgeMs = 0,
     }: PageCollectorOptions = {},
   ) {
     this.pptrPage = page;
     this.maxNavigationSaved = maxNavigationSaved;
+    this.#maxResourceAgeMs = maxResourceAgeMs;
+    if (maxResourceAgeMs > 0) {
+      this.#expiryTimer = setInterval(
+        () => this.#pruneExpired(),
+        Math.min(maxResourceAgeMs, 30_000),
+      );
+      this.#expiryTimer.unref();
+    }
     this.#attachFrameNavigatedWithinDocumentListener();
 
     const idGenerator = createIdGenerator();
@@ -96,6 +109,9 @@ export class PageCollector<T> {
     const listenerMap = listeners(value => {
       const withId = value as WithSymbolId<T>;
       withId[stableIdSymbol] = idGenerator();
+      if (this.#maxResourceAgeMs > 0) {
+        this.#collectedAt.set(withId, Date.now());
+      }
       this.storage[0].push(withId);
       if (
         maxResourcesPerNavigation !== undefined &&
@@ -136,6 +152,9 @@ export class PageCollector<T> {
   }
 
   dispose(): void {
+    clearInterval(this.#expiryTimer);
+    this.#expiryTimer = undefined;
+    this.storage = [[]];
     this.#detachFrameNavigatedWithinDocumentListener();
     if (this.#listeners) {
       for (const [name, listener] of Object.entries(this.#listeners)) {
@@ -177,6 +196,7 @@ export class PageCollector<T> {
   }
 
   getData(includePreservedData?: boolean): T[] {
+    this.#pruneExpired();
     if (!includePreservedData) {
       return this.storage[0];
     }
@@ -207,6 +227,7 @@ export class PageCollector<T> {
   find(
     filter: (item: WithSymbolId<T>) => boolean,
   ): WithSymbolId<T> | undefined {
+    this.#pruneExpired();
     for (const navigation of this.storage) {
       const item = navigation.find(filter);
       if (item) {
@@ -214,6 +235,18 @@ export class PageCollector<T> {
       }
     }
     return;
+  }
+
+  #pruneExpired(): void {
+    if (this.#maxResourceAgeMs <= 0) {
+      return;
+    }
+    const cutoff = Date.now() - this.#maxResourceAgeMs;
+    for (let index = 0; index < this.storage.length; index++) {
+      this.storage[index] = this.storage[index].filter(
+        item => (this.#collectedAt.get(item) ?? 0) > cutoff,
+      );
+    }
   }
 }
 
@@ -234,10 +267,18 @@ export class ConsoleCollector extends PageCollector<
     {
       maxResourcesPerNavigation = ConsoleCollector.MAX_MESSAGES_PER_NAVIGATION,
       maxNavigationSaved,
+      maxResourceAgeMs = 0,
     }: PageCollectorOptions = {},
   ) {
-    super(page, listeners, {maxResourcesPerNavigation, maxNavigationSaved});
-    this.#subscriber = new PageEventSubscriber(this.pptrPage);
+    super(page, listeners, {
+      maxResourcesPerNavigation,
+      maxNavigationSaved,
+      maxResourceAgeMs,
+    });
+    this.#subscriber = new PageEventSubscriber(this.pptrPage, {
+      maxIssues: maxResourceAgeMs > 0 ? maxResourcesPerNavigation : undefined,
+      maxIssueAgeMs: maxResourceAgeMs,
+    });
     this.#subscriber.subscribe();
   }
 
@@ -257,9 +298,27 @@ class PageEventSubscriber {
   #targetId: string;
   #pendingSameDocumentNavigation = false;
   #frameNavigatedWithinDocumentTarget?: Frame;
+  #maxIssues: number;
+  #expiryTimer?: ReturnType<typeof setInterval>;
 
-  constructor(page: Page) {
+  constructor(
+    page: Page,
+    options: {
+      maxIssues?: number;
+      maxIssueAgeMs?: number;
+    } = {},
+  ) {
     this.#page = page;
+    this.#maxIssues = options.maxIssues ?? Infinity;
+    const maxIssueAgeMs = options.maxIssueAgeMs ?? 0;
+    if (maxIssueAgeMs > 0) {
+      this.#expiryTimer = setInterval(() => {
+        this.#seenKeys.clear();
+        this.#seenIssues.clear();
+        this.#resetIssueAggregator();
+      }, maxIssueAgeMs);
+      this.#expiryTimer.unref();
+    }
     // @ts-expect-error use existing CDP client (internal Puppeteer API).
     this.#session = this.#page._client() as CDPSession;
     // @ts-expect-error use internal Puppeteer API to get target ID
@@ -290,6 +349,8 @@ class PageEventSubscriber {
   }
 
   unsubscribe(): void {
+    clearInterval(this.#expiryTimer);
+    this.#expiryTimer = undefined;
     this.#seenKeys.clear();
     this.#seenIssues.clear();
     this.#detachFrameNavigatedWithinDocumentListener();
@@ -387,6 +448,11 @@ class PageEventSubscriber {
       if (this.#seenKeys.has(primaryKey)) {
         return;
       }
+      if (this.#seenKeys.size >= this.#maxIssues) {
+        this.#seenKeys.clear();
+        this.#seenIssues.clear();
+        this.#resetIssueAggregator();
+      }
       this.#seenKeys.add(primaryKey);
       this.#issueManager.dispatchEventToListeners(
         DevTools.IssuesManagerEvents.ISSUE_ADDED,
@@ -413,6 +479,7 @@ export class NetworkCollector extends PageCollector<HTTPRequest> {
     {
       maxResourcesPerNavigation = NetworkCollector.MAX_REQUESTS_PER_NAVIGATION,
       maxNavigationSaved,
+      maxResourceAgeMs,
     }: PageCollectorOptions = {},
     listeners: (
       collector: (item: HTTPRequest) => void,
@@ -430,7 +497,15 @@ export class NetworkCollector extends PageCollector<HTTPRequest> {
       } as ListenerMap;
     },
   ) {
-    super(page, listeners, {maxResourcesPerNavigation, maxNavigationSaved});
+    super(page, listeners, {
+      maxResourcesPerNavigation,
+      maxNavigationSaved,
+      maxResourceAgeMs,
+    });
+  }
+  override dispose(): void {
+    this.#navigationRequest = undefined;
+    super.dispose();
   }
   override splitAfterNavigation(): void {
     const requests = this.storage[0];

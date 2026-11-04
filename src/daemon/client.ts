@@ -12,11 +12,7 @@ import path from 'node:path';
 import {PipeTransport} from '../third_party/cli.js';
 import type {CallToolResult} from '../third_party/index.js';
 import {getTempFilePath} from '../utils/files.js';
-import {
-  logger,
-  puppeteerLogger,
-  redactDaemonArgsForLogging,
-} from '../utils/logger.js';
+import {logger, redactDaemonArgsForLogging} from '../utils/logger.js';
 
 import type {
   DaemonMessage,
@@ -32,6 +28,7 @@ import {
 } from './utils.js';
 
 const FILE_TIMEOUT = 10_000;
+const STARTUP_TIMEOUT = 60_000;
 const READY_CHECK_INTERVAL = 100;
 const READY_CHECK_COMMAND_TIMEOUT = 1_000;
 
@@ -44,8 +41,9 @@ function delay(ms: number): Promise<void> {
 async function waitFor(
   check: () => boolean,
   timeoutMessage: string,
+  timeoutMs = FILE_TIMEOUT,
 ): Promise<void> {
-  const deadline = Date.now() + FILE_TIMEOUT;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (check()) {
       return;
@@ -66,24 +64,41 @@ async function waitFor(
 /**
  * Waits for a file to be created and populated.
  */
-async function waitForFile(filePath: string): Promise<void> {
-  await waitFor(() => {
-    if (!fs.existsSync(filePath)) {
-      return false;
-    }
-    try {
-      return fs.statSync(filePath).size > 0;
-    } catch {
-      return false;
-    }
-  }, `Timeout: file ${filePath} not found within ${FILE_TIMEOUT}ms`);
+async function waitForFile(
+  filePath: string,
+  timeoutMs: number,
+  assertAlive: () => void,
+): Promise<void> {
+  await waitFor(
+    () => {
+      assertAlive();
+      if (!fs.existsSync(filePath)) {
+        return false;
+      }
+      try {
+        return fs.statSync(filePath).size > 0;
+      } catch {
+        return false;
+      }
+    },
+    `Timeout: file ${filePath} not found within ${timeoutMs}ms`,
+    timeoutMs,
+  );
 }
 
-async function waitForDaemonReady(sessionId: string): Promise<void> {
-  const deadline = Date.now() + FILE_TIMEOUT;
+async function waitForDaemonReady(
+  sessionId: string,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
 
   while (Date.now() < deadline) {
+    if (!isDaemonRunning(sessionId)) {
+      throw new Error(
+        `Daemon exited before becoming ready: session ${sessionId}`,
+      );
+    }
     try {
       const response = await sendCommand(
         {method: 'status'},
@@ -105,7 +120,7 @@ async function waitForDaemonReady(sessionId: string): Promise<void> {
   }
 
   throw new Error(
-    `Timeout: daemon not ready within ${FILE_TIMEOUT}ms`,
+    `Timeout: daemon not ready within ${timeoutMs}ms`,
     lastError === undefined ? undefined : {cause: lastError},
   );
 }
@@ -113,10 +128,11 @@ async function waitForDaemonReady(sessionId: string): Promise<void> {
 export async function startDaemon(
   mcpArgs: string[] = [],
   sessionId: string,
+  {timeoutMs = STARTUP_TIMEOUT}: {timeoutMs?: number} = {},
 ): Promise<void> {
   if (isDaemonRunning(sessionId)) {
     logger?.('Daemon is already running');
-    await waitForDaemonReady(sessionId);
+    await waitForDaemonReady(sessionId, timeoutMs);
     return;
   }
 
@@ -147,8 +163,43 @@ export async function startDaemon(
   });
   child.unref();
 
-  await waitForFile(pidFilePath);
-  await waitForDaemonReady(sessionId);
+  let spawnError: Error | undefined;
+  const onError = (error: Error): void => {
+    spawnError = error;
+  };
+  child.on('error', onError);
+  try {
+    await waitForFile(pidFilePath, timeoutMs, () => {
+      if (spawnError) {
+        throw spawnError;
+      }
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(
+          `Daemon ${child.pid} exited during startup: code=${child.exitCode}, signal=${child.signalCode}`,
+        );
+      }
+    });
+    await waitForDaemonReady(sessionId, timeoutMs);
+  } catch (error) {
+    child.kill('SIGTERM');
+    const deadline = Date.now() + 3_000;
+    while (
+      child.exitCode === null &&
+      child.signalCode === null &&
+      Date.now() < deadline
+    ) {
+      await delay(100);
+    }
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill('SIGKILL');
+    }
+    if (child.pid && getDaemonPid(sessionId) === child.pid) {
+      fs.rmSync(pidFilePath, {force: true});
+    }
+    throw error;
+  } finally {
+    child.off('error', onError);
+  }
 }
 
 const SEND_COMMAND_TIMEOUT = 60_000; // ms
@@ -178,10 +229,10 @@ export async function sendCommand(
       reject(new Error('Timeout waiting for daemon response'));
     }, timeout);
 
-    const transport = new PipeTransport(socket, socket, puppeteerLogger);
+    const transport = new PipeTransport(socket, socket, () => undefined);
     transport.onmessage = async (message: string) => {
       clearTimeout(timer);
-      logger?.('onmessage', message);
+      logger?.('Received daemon response');
       socket.end();
       resolve(JSON.parse(message));
     };
@@ -195,7 +246,7 @@ export async function sendCommand(
       logger?.('Socket closed:');
       reject(new Error('Socket closed'));
     });
-    logger?.('Sending message', command);
+    logger?.('Sending daemon method', command.method);
     transport.send(JSON.stringify(command));
   });
 }

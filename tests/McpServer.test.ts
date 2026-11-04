@@ -18,7 +18,10 @@ import {getOffByDefaultCategories} from '../src/config/category-options.js';
 import {ConfigLocator} from '../src/config/ConfigLocator.js';
 import {ConfigParser} from '../src/config/ConfigParser.js';
 import {ConfigWatcher} from '../src/config/ConfigWatcher.js';
-import {mcpOptions} from '../src/config/mcp-options.js';
+import {
+  DEFAULT_FILESYSTEM_ROOT,
+  mcpOptions,
+} from '../src/config/mcp-options.js';
 import {McpServer} from '../src/index.js';
 import {McpContext} from '../src/McpContext.js';
 import {ClearcutLogger} from '../src/telemetry/ClearcutLogger.js';
@@ -96,6 +99,42 @@ describe('McpServer', () => {
     const tools = await listServerTools(server);
     return tools.map(tool => tool.name);
   }
+
+  it('lists the same enabled tool schemas for shared and native clients', async () => {
+    const {server} = await createTestServer(['--slim']);
+    try {
+      assert.deepStrictEqual(
+        JSON.parse(JSON.stringify(server.listTools())),
+        JSON.parse(JSON.stringify(await listServerTools(server))),
+      );
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('routes a shared client call with its own roots and clears them afterwards', async () => {
+    const {server, context} = await createTestServer();
+    const roots = [{uri: 'file:///tmp/client-a'}];
+    const call = sinon.stub(server, 'callTool').resolves({content: []});
+    try {
+      context.setRoots.resetHistory();
+      assert.deepStrictEqual(
+        await server.callToolForClient('a', 'list_pages', {}, roots),
+        {content: []},
+      );
+      sinon.assert.calledOnceWithExactly(call, 'list_pages', {});
+      sinon.assert.calledWithExactly(context.setRoots.firstCall, [
+        ...roots,
+        ...DEFAULT_FILESYSTEM_ROOT.map(root => ({
+          uri: pathToFileURL(path.resolve(root)).href,
+          name: path.basename(root),
+        })),
+      ]);
+      sinon.assert.calledWithExactly(context.setRoots.lastCall, undefined);
+    } finally {
+      await server.close();
+    }
+  });
 
   it('passes the navigation limit to the lazily connected context', async () => {
     const context = createMockMcpContext();

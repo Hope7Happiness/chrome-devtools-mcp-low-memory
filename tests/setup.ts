@@ -9,6 +9,9 @@ import {afterEach, it} from 'node:test';
 
 import sinon from 'sinon';
 
+export const e2eConcurrency: boolean | number =
+  process.env.CHROME_DEVTOOLS_MCP_TEST_SERIAL === 'true' ? 1 : true;
+
 // This module runs for every test file, so it must not import src code. Test
 // files that use DevTools import tests/setupDevTools.ts.
 

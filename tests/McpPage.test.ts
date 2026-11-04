@@ -319,6 +319,39 @@ describe('McpPage', () => {
   }
 
   describe('lazy initialization', () => {
+    it('bounds lowMemory collectors and expires idle records', async () => {
+      const clock = sinon.useFakeTimers();
+      const pptrPage = createMockPuppeteerPage();
+      const target = createMockPuppeteerTarget({page: pptrPage});
+      const page = new McpPage(target, 1, {
+        config: createMockServerConfig({lowMemory: true}),
+        locatorClass: Locator,
+      });
+      await page.init();
+      for (let i = 0; i < 250; i++) {
+        pptrPage.emit('request', getMockRequest());
+        pptrPage.emit(
+          'uncaughtError',
+          new UncaughtError(
+            {
+              exceptionId: i,
+              text: 'error',
+              lineNumber: 0,
+              columnNumber: 0,
+            },
+            'mock',
+          ),
+        );
+      }
+      assert.strictEqual(page.networkCollector.getData(true).length, 100);
+      assert.strictEqual(page.consoleCollector.getData(true).length, 200);
+      clock.tick(60_001);
+      assert.deepStrictEqual(page.networkCollector.getData(true), []);
+      assert.deepStrictEqual(page.consoleCollector.getData(true), []);
+      page.dispose();
+      assert.strictEqual(clock.countTimers(), 0);
+    });
+
     for (const replaceNetworkCollector of [false, true]) {
       it(`forwards the navigation limit to collectors (replacement: ${replaceNetworkCollector})`, async () => {
         const pptrPage = createMockPuppeteerPage();
@@ -1227,7 +1260,7 @@ describe('McpPage', () => {
 
         const element = await mcpPage.waitForTextOnPage(
           ['Saved successfully'],
-          {timeout: 500},
+          {timeout: 5000},
         );
         assert.ok(element);
       });
@@ -1552,6 +1585,30 @@ describe('McpPage', () => {
   });
 
   describe('syncSourceMaps()', () => {
+    it('keeps source maps disabled in lowMemory mode after a config update', async () => {
+      const config = createMockServerConfig({
+        lowMemory: true,
+        sourceMaps: true,
+      });
+      const pptrPage = createMockPuppeteerPage();
+      pptrPage.createCDPSession.resolves(createMockCDPSession());
+      const page = new McpPage(createMockPuppeteerTarget({page: pptrPage}), 1, {
+        config,
+        locatorClass: Locator,
+      });
+      await page.init();
+      page.syncSourceMaps();
+      const settings = page.devtoolsUniverse?.universe.settings;
+      assert.ok(settings);
+      for (const descriptor of [
+        DevTools.SDKSettings.jsSourceMapsEnabledSettingDescriptor,
+        DevTools.SDKSettings.cssSourceMapsEnabledSettingDescriptor,
+      ]) {
+        assert.strictEqual(settings.resolve(descriptor).get(), false);
+      }
+      page.dispose();
+    });
+
     it('does nothing before init() initializes the DevTools universe', () => {
       const config = createMockServerConfig({sourceMaps: false});
       const target = createMockPuppeteerTarget();

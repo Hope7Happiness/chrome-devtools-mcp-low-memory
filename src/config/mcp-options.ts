@@ -47,6 +47,8 @@ export interface McpArguments
   javascriptEvaluation: boolean;
   fileNavigations: boolean;
   sourceMaps: boolean;
+  lowMemory: boolean;
+  sharedHttpPort?: number;
   maxNavigationSaved: number;
   clearcutEndpoint?: string;
   clearcutForceFlushIntervalMs?: number;
@@ -210,6 +212,28 @@ export const mcpOptions: McpOptions = {
     describe:
       'Set to false to disallow navigating to file: URLs. When disabled, new_page, navigate_page and the slim navigate tool reject file: URLs, including view-source: URLs that target them. This restricts navigations the server performs. It is not a filesystem sandbox: it does not affect pages the browser already had open when the server connected, and the browser can reach the filesystem by other means. Use OS sandboxing for full filesystem confinement.',
     reloadable: true,
+  },
+  lowMemory: {
+    type: 'boolean',
+    default: false,
+    describe:
+      'Use lazy page discovery, disable source maps, and retain at most one navigation, 100 requests and 200 console messages per page for 60 seconds. Direct shared HTTP clients target 200 MiB combined MCP memory; stdio frontends add their own memory. This is not a hard process limit.',
+  },
+  sharedHttpPort: {
+    type: 'number',
+    describe:
+      'Serve shared MCP sessions on 127.0.0.1 at this port (0 selects an available port). Clients connect directly without per-pane stdio processes. Requires the private bearer token stored in the persistent user state directory.',
+    coerce: (value: number | undefined) => {
+      if (
+        value !== undefined &&
+        (!Number.isInteger(value) || value < 0 || value > 65535)
+      ) {
+        throw new Error(
+          '--sharedHttpPort must be an integer between 0 and 65535',
+        );
+      }
+      return value;
+    },
   },
   sourceMaps: {
     type: 'boolean',

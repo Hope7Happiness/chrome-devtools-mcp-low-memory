@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import {describe, it, after, before} from 'node:test';
 
 import {runCli, stopDaemonForCleanup} from '../utils.js';
+import {e2eConcurrency} from '../setup.js';
 
 describe('chrome-devtools positional values starting with a hyphen', () => {
   const fillCases: Array<{value: string[]; expected: string}> = [
@@ -93,7 +94,7 @@ describe('chrome-devtools positional values starting with a hyphen', () => {
 
   // Each fill case uses its own textarea, so the cases run in parallel. The
   // daemon still runs one tool call at a time.
-  describe('fill', {concurrency: true}, () => {
+  describe('fill', {concurrency: e2eConcurrency}, () => {
     for (const [index, {value, expected}] of fillCases.entries()) {
       it(`fill passes ${JSON.stringify(value.join(' '))} through`, async () => {
         const args = ['fill', '1', textareaUids[index], ...value];

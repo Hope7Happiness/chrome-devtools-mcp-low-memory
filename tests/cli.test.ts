@@ -72,6 +72,7 @@ describe('cli args parsing', () => {
     experimentalStructuredContent: false,
     pageIdRouting: true,
     sourceMaps: true,
+    lowMemory: false,
     maxNavigationSaved: 3,
     clearcutIncludePidHeader: false,
     screenshotFormat: 'png',
@@ -702,6 +703,18 @@ describe('cli args parsing', () => {
 
     const explicitTrueArgs = parseConfig(['--source-maps=true']);
     assert.strictEqual(explicitTrueArgs.sourceMaps, true);
+  });
+
+  it('parses lowMemory and validates the shared HTTP port', () => {
+    const args = parseConfig(['--low-memory', '--shared-http-port=0']);
+    assert.strictEqual(args.lowMemory, true);
+    assert.strictEqual(args.sharedHttpPort, 0);
+    for (const port of ['-1', '65536', '1.5', 'invalid']) {
+      assert.throws(
+        () => parseConfig([`--shared-http-port=${port}`]),
+        /integer between 0 and 65535/,
+      );
+    }
   });
 
   it('parses maxNavigationSaved flag', async () => {

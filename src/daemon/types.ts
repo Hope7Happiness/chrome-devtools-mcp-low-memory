@@ -13,8 +13,13 @@ export type DaemonMessage =
     }
   | {
       method: 'invoke_tool';
+      clientId?: string;
+      roots?: Array<{uri: string; name?: string}>;
       tool: string;
       args?: Record<string, unknown>;
+    }
+  | {
+      method: 'list_tools';
     };
 
 export interface DaemonResponse {
@@ -30,4 +35,8 @@ export interface DaemonStatusResult {
   startDate: string;
   version: string;
   args: string[];
+  memory: NodeJS.MemoryUsage;
+  maxRssBytes: number;
+  httpUrl?: string;
+  httpTokenFile?: string;
 }

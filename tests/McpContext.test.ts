@@ -125,6 +125,45 @@ describe('McpContext', () => {
     );
   }
 
+  it('keeps the selected page lazy in lowMemory discovery', async () => {
+    const {page, target} = createPageTarget();
+    const context = await createMockContext({
+      targets: [target],
+      config: createMockServerConfig({lowMemory: true}),
+    });
+    try {
+      await context.createPagesSnapshot();
+      assert.strictEqual(context.getPages().length, 1);
+      assert.strictEqual(context.getSelectedMcpPage().target, target);
+      assert.throws(
+        () => context.getSelectedMcpPage().pptrPage,
+        /not initialized/,
+      );
+      sinon.assert.notCalled(target.page);
+      sinon.assert.notCalled(page.emulateFocusedPage);
+    } finally {
+      context.dispose();
+    }
+  });
+
+  it('initializes lowMemory pages when discovery requires WebMCP', async () => {
+    const {page, target} = createPageTarget();
+    const context = await createMockContext({
+      targets: [target],
+      config: createMockServerConfig({
+        lowMemory: true,
+        categoryExperimentalWebmcp: true,
+      }),
+    });
+    try {
+      assert.strictEqual(context.getSelectedMcpPage().pptrPage, page);
+      sinon.assert.calledOnceWithExactly(target.page);
+      sinon.assert.notCalled(page.emulateFocusedPage);
+    } finally {
+      context.dispose();
+    }
+  });
+
   describe('getServiceWorkerConsoleData', () => {
     it('resolves the service worker ID to the collector extension ID', async () => {
       const browser = createMockPuppeteerBrowser();

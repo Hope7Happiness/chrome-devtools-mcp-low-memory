@@ -69,6 +69,13 @@ export function getRuntimeHome(sessionId: string): string {
   return path.join(os.tmpdir(), appName);
 }
 
+export function getStateHome(sessionId: string): string {
+  assertValidSessionId(sessionId);
+  const stateHome =
+    process.env.XDG_STATE_HOME || path.join(os.homedir(), '.local', 'state');
+  return path.join(stateHome, APP_NAME, sessionId || 'default');
+}
+
 export const IS_WINDOWS: boolean = os.platform() === 'win32';
 
 export function getPidFilePath(sessionId: string): string {

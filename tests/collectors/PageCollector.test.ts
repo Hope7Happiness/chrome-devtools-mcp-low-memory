@@ -35,6 +35,52 @@ function createMockConsoleMessage(text: string): ConsoleMessage {
 }
 
 describe('PageCollector', () => {
+  it('expires resources without a navigation and stops its expiry timer', () => {
+    const clock = sinon.useFakeTimers();
+    const pptrPage = createMockPuppeteerPage();
+    const collector = new PageCollector<Error>(
+      pptrPage,
+      collect => ({
+        pageerror: error => {
+          if (error instanceof Error) {
+            collect(error);
+          }
+        },
+      }),
+      {maxResourceAgeMs: 1000},
+    );
+    pptrPage.emit('pageerror', new Error('expired'));
+    clock.tick(900);
+    const recent = new Error('recent');
+    pptrPage.emit('pageerror', recent);
+    clock.tick(101);
+    assert.deepStrictEqual(collector.getData(true), [recent]);
+    collector.dispose();
+    assert.deepStrictEqual(collector.getData(true), []);
+    assert.strictEqual(clock.countTimers(), 0);
+  });
+
+  it('expires preserved navigations as well as the current navigation', () => {
+    const clock = sinon.useFakeTimers();
+    const pptrPage = createMockPuppeteerPage();
+    const collector = new PageCollector<Error>(
+      pptrPage,
+      collect => ({
+        pageerror: error => {
+          if (error instanceof Error) {
+            collect(error);
+          }
+        },
+      }),
+      {maxResourceAgeMs: 1000},
+    );
+    pptrPage.emit('pageerror', new Error('previous'));
+    pptrPage.emit('framenavigated', pptrPage.mainFrame());
+    clock.tick(1001);
+    assert.deepStrictEqual(collector.getData(true), []);
+    collector.dispose();
+  });
+
   it('applies resource and navigation limits independently', () => {
     const pptrPage = createMockPuppeteerPage();
     const collector = new PageCollector<Error>(
@@ -601,6 +647,55 @@ describe('ConsoleCollector', () => {
       collector.dispose();
     });
   }
+
+  it('expires issue deduplication and releases its timer on disposal', () => {
+    const clock = sinon.useFakeTimers();
+    const page = createMockPuppeteerPage();
+    const collector = new ConsoleCollector(
+      page,
+      collect => ({devtoolsAggregatedIssue: collect}),
+      {maxResourceAgeMs: 1000, maxResourcesPerNavigation: 2},
+    );
+    page.emit('issue', issue);
+    const original = collector.getData()[0];
+    assert.ok(original);
+    page.emit('issue', issue);
+    assert.strictEqual(collector.getData().length, 1);
+    clock.tick(1001);
+    page.emit('issue', issue);
+    assert.strictEqual(collector.getData().length, 1);
+    assert.notStrictEqual(collector.getData()[0], original);
+    collector.dispose();
+    assert.strictEqual(clock.countTimers(), 0);
+  });
+
+  it('bounds the issue aggregator before the console resource cap is reached', () => {
+    const page = createMockPuppeteerPage();
+    const collector = new ConsoleCollector(
+      page,
+      collect => ({devtoolsAggregatedIssue: collect}),
+      {maxResourceAgeMs: 1000, maxResourcesPerNavigation: 2},
+    );
+    for (let i = 0; i < 3; i++) {
+      const nextIssue: Protocol.Audits.InspectorIssue = {
+        code: 'MixedContentIssue',
+        details: {
+          mixedContentIssueDetails: {
+            insecureURL: `http://example.test/${i}`,
+            resolutionStatus: 'MixedContentBlocked',
+            mainResourceURL: '',
+          },
+        },
+      };
+      page.emit('issue', nextIssue);
+    }
+    const data = collector.getData();
+    assert.strictEqual(data.length, 2);
+    const latest = data[1];
+    assert.ok(latest instanceof DevTools.AggregatedIssue);
+    assert.strictEqual(latest.getAggregatedIssuesCount(), 1);
+    collector.dispose();
+  });
 
   it('collects issues', async () => {
     const browser = getMockBrowser();

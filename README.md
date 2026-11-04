@@ -1,5 +1,102 @@
 # Chrome DevTools for agents
 
+## Unofficial low-memory fork
+
+This fork targets roughly 200 MiB for **all MCP service processes combined**
+during ordinary automation. Chrome and the coding agents themselves are
+excluded. Clients connect directly to one shared HTTP MCP process, without
+per-pane stdio processes. This is a measurement target, not an enforced limit
+or a guarantee for arbitrary pages and traces.
+
+Representative macOS ARM64 measurements with eight clients, two fixture
+pages, 250 requests and 1,000 console messages per page:
+
+| Architecture                                            | After every client snapshots both pages | After 65 seconds idle |
+| ------------------------------------------------------- | --------------------------------------: | --------------------: |
+| Shared daemon, eight stdio frontends, normal collection |                               595.6 MiB |             584.1 MiB |
+| Direct HTTP, low-memory collection                      |                               201.2 MiB |             127.4 MiB |
+
+The direct-HTTP process's lifetime peak was 210.9 MiB. These are separate
+isolated synthetic runs; real sites and allocator timing vary. Raw reports:
+[comparison](benchmarks/2026-11-04-comparison.json) and
+[final HTTP run](benchmarks/2026-11-04-http.json).
+
+Build from this repository with `npm run sync` and `npm run build`.
+Start the service once with
+`node build/src/bin/chrome-devtools-mcp-http.js <browser connection flags>`.
+This launcher enables `--lowMemory`, disables usage statistics, and exits
+after printing the HTTP URL and private bearer-token file path. Configure
+each MCP client with that URL and a bearer token read from the printed file.
+The default endpoint is `http://127.0.0.1:9335/mcp`.
+HTTP uses stateful, initialize-based Streamable HTTP sessions. SDK clients
+using automatic negotiation can fall back to this protocol; clients pinned
+to a modern discover-only protocol are not supported by this entry point.
+The service binds only to loopback, requires its private token, rejects
+browser origins and unexpected Host headers, and limits request bodies to
+1 MiB. Token contents never appear in startup output or memory reports.
+Tokens persist across reboots in
+`$XDG_STATE_HOME/chrome-devtools-mcp/<session>/http-token`, defaulting to
+`~/.local/state/chrome-devtools-mcp/<session>/http-token`.
+
+For clients that only support stdio, the alternative entry point is
+`node build/src/bin/chrome-devtools-mcp-shared.js` with the same connection
+flags. Each such client adds its own frontend process, which counts against
+the combined target. Existing `chrome-devtools-mcp` and `chrome-devtools`
+entry points remain available. Choose HTTP to avoid this per-client cost.
+
+- Page discovery does not initialize the selected page until a tool uses it.
+  Enabling WebMCP or third-party tool discovery requires initialization.
+- Each initialized page retains one navigation, 100 network requests and
+  200 console entries. Entries expire after 60 seconds and idle caches are
+  swept every 30 seconds. Issue aggregation has a separate bounded cache.
+- Source maps are disabled in low-memory mode, including after config reload.
+- Calls are serialized across clients. Selected pages, filesystem roots and
+  accessibility snapshots are restored per client. At most 16 clients and
+  two snapshots per client are retained; idle client state expires after
+  ten minutes, with a one-minute sweep. After eviction, take a fresh snapshot.
+- HTTP sessions are also capped at 16. At capacity, an inactive session idle
+  for over a minute can be replaced; other idle sessions expire after ten
+  minutes. Reinitialize the HTTP connection after session expiry. Clients
+  should send DELETE when ending their HTTP session.
+
+Clients still share the same browser, cookies and live page state. Navigating
+or closing a shared page affects every client using it. This is not a browser
+or security isolation boundary. Long recordings, large snapshots, retained
+debugger state and many initialized pages can exceed the memory target.
+
+Use the same `CHROME_DEVTOOLS_MCP_SESSION_ID` for clients sharing a backend
+(default `200-ba5e`); IDs may contain only hexadecimal digits and hyphens.
+Different browser configurations must use different IDs. Concurrent startup
+is serialized with an exclusive lock; a conflicting configuration is rejected.
+Both module-loading and readiness waits allow up to 60 seconds. If a new
+daemon exits early, startup fails promptly; timed-out children are reaped.
+If a startup process is forcibly killed, inspect the PID in the reported
+`startup.lock` file and remove it only after confirming that process exited.
+Disconnecting a client leaves the backend available to other clients.
+The shared entry points forward tool requests/results and roots; they do not
+relay progress, log, configuration-change or cancellation notifications.
+Stdio requests have a three-minute IPC timeout. A client-side timeout
+does not cancel an already running browser action. Restart this experimental
+entry point after configuration changes that affect tool schemas.
+Stop it explicitly using
+`node build/src/bin/chrome-devtools.js stop --sessionId 200-ba5e`.
+
+Run `npm run profile:low-memory -- /tmp/low-memory-results.json` to compare
+eight shared-stdio clients with eight direct-HTTP clients on the same
+synthetic workload in separate isolated headless Chrome instances.
+Add `--http-only` to measure just the optimized architecture.
+The report includes Node heap, current and peak RSS, and
+macOS physical footprint and its lifetime peak (including compressed memory), plus the frontend
+footprint and combined total. macOS measurements compile a small probe using
+Xcode Command Line Tools and call `proc_pid_rusage`. The benchmark does not
+use forced GC or a V8 heap limit.
+No production browser or agent configuration is changed by building this fork.
+
+To run every test on a machine with limited RAM, use
+`CHROME_DEVTOOLS_MCP_TEST_SERIAL=true npm run test -- --test-concurrency=1`.
+This runs independent browser integration cases serially; tests that exercise
+concurrent requests still issue those requests concurrently.
+
 [![npm chrome-devtools-mcp package](https://img.shields.io/npm/v/chrome-devtools-mcp.svg)](https://npmjs.org/package/chrome-devtools-mcp)
 
 Chrome DevTools for agents (`chrome-devtools-mcp`) lets your coding agent (such as Antigravity, Claude, Cursor or Copilot)

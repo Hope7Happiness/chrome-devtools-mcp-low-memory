@@ -10,9 +10,10 @@ import 'core-js/proposals/iterator-helpers.js';
 
 import type {Flags, OutputMode, Result, RunnerResult} from 'lighthouse';
 import type {Page} from 'puppeteer-core';
-import {z as zod} from 'zod';
+import {zod} from './shared.js';
 
 import type * as LighthouseBundle from './lighthouse-devtools-mcp-bundle.js';
+export {isSpecType} from './shared.js';
 
 export type {Flags, Result, RunnerResult, OutputMode};
 
@@ -23,25 +24,22 @@ export {
   ProtocolError,
   ProtocolErrorCode,
   type RegisteredTool,
-} from '@modelcontextprotocol/server';
-export {
-  StdioServerTransport,
-  serveStdio,
-} from '@modelcontextprotocol/server/stdio';
-export type {Transport} from '@modelcontextprotocol/server';
+} from './shared.js';
+export {StdioServerTransport, serveStdio} from './shared.js';
+export type {Transport} from './shared.js';
 export {
   type CallToolResult,
   type ImageContent,
   type TextContent,
   type Tool,
   type Root,
-} from '@modelcontextprotocol/server';
+} from './shared.js';
 export {
   SetLevelRequestSchema,
   ListRootsRequestSchema,
   RootsListChangedNotificationSchema,
   ListRootsResultSchema,
-} from '@modelcontextprotocol/core';
+} from './shared.js';
 export {zod};
 export type ShapeOutput<T extends zod.ZodRawShape> = zod.output<
   zod.ZodObject<T>

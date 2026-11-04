@@ -9,6 +9,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {describe, it} from 'node:test';
 import {pathToFileURL} from 'node:url';
+import {e2eConcurrency} from '../setup.js';
 
 import {
   assertDaemonIsRunning,
@@ -19,7 +20,7 @@ import {
 } from '../utils.js';
 
 // Each test uses its own daemon session, so the tests run in parallel.
-describe('chrome-devtools', {concurrency: true}, () => {
+describe('chrome-devtools', {concurrency: e2eConcurrency}, () => {
   it('can invoke list_pages', async t => {
     const sessionId = createCliSession(t);
     const startResult = await runCli(['start'], sessionId);

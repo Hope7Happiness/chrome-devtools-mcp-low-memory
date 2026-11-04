@@ -17,10 +17,11 @@ import {StdioClientTransport} from '@modelcontextprotocol/client/stdio';
 import type {TextContent} from '../src/third_party/index.js';
 
 import {createTempDir} from './utils.js';
+import {e2eConcurrency} from './setup.js';
 
 // Each test starts its own server process, so the tests run in parallel. Most
 // of the test time is server start and waits, not CPU work.
-describe('e2e', {concurrency: true}, () => {
+describe('e2e', {concurrency: e2eConcurrency}, () => {
   async function withClient(
     cb: (client: Client) => Promise<void>,
     extraArgs: string[] = [],
@@ -372,7 +373,7 @@ describe('e2e', {concurrency: true}, () => {
     );
   });
 
-  describe('Dialogs', {concurrency: true}, () => {
+  describe('Dialogs', {concurrency: e2eConcurrency}, () => {
     function getFirstText(
       result: Awaited<ReturnType<Client['callTool']>>,
     ): string {
