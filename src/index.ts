@@ -72,6 +72,11 @@ export class McpServer {
   #browserManager: BrowserManager;
   #context: McpContext;
   #clientSessions: ClientSessions;
+  #sharedCalls = 0;
+  #lastSharedActivity = Date.now();
+  #idleReleaseBusy = false;
+  #persistentBrowserState = false;
+
   /** Runs every tool call and config reload. */
   #taskRunner = new TaskRunner();
   #heapSnapshotManager = new HeapSnapshotManager(this.#taskRunner);
@@ -193,11 +198,63 @@ export class McpServer {
     args: Record<string, unknown> = {},
     roots?: Root[],
   ): Promise<CallToolResult> {
-    return await this.#clientSessions.run(
-      clientId,
-      [...(roots ?? []), ...(this.#combinedRoots() ?? [])],
-      () => this.callTool(name, args),
-    );
+    this.#sharedCalls++;
+    this.#lastSharedActivity = Date.now();
+    if (['emulate', 'set_logpoints', 'configure_webauthn'].includes(name)) {
+      this.#persistentBrowserState = true;
+    }
+    try {
+      return await this.#clientSessions.run(
+        clientId,
+        [...(roots ?? []), ...(this.#combinedRoots() ?? [])],
+        () => this.callTool(name, args),
+      );
+    } finally {
+      this.#sharedCalls--;
+      this.#lastSharedActivity = Date.now();
+    }
+  }
+
+  async releaseIdleBrowser(): Promise<boolean> {
+    const args = this.#config.resolved;
+    const idle = (): boolean =>
+      this.#sharedCalls === 0 &&
+      Date.now() - this.#lastSharedActivity >= 15 * 60_000;
+    if (
+      !args.lowMemory ||
+      !(args.browserUrl || args.wsEndpoint) ||
+      this.#idleReleaseBusy ||
+      this.#persistentBrowserState ||
+      !idle()
+    ) {
+      return false;
+    }
+    this.#idleReleaseBusy = true;
+    try {
+      using guard = await this.#taskRunner.pause();
+      if (!idle() || this.#persistentBrowserState) {
+        return false;
+      }
+      if (
+        this.#context
+          .getPages()
+          .some(
+            page =>
+              page.isRunningPerformanceTrace() ||
+              page.getScreenRecorder() ||
+              page.getDialog() ||
+              page.isolatedContextName,
+          )
+      ) {
+        return false;
+      }
+      await this.#browserManager.close();
+      this.#context.dispose();
+      this.#lastSharedActivity = Date.now();
+      return true;
+    } finally {
+      this.#idleReleaseBusy = false;
+    }
   }
 
   listTools(): Tool[] {

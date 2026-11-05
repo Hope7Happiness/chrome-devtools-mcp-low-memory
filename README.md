@@ -44,6 +44,14 @@ flags. Each such client adds its own frontend process, which counts against
 the combined target. Existing `chrome-devtools-mcp` and `chrome-devtools`
 entry points remain available. Choose HTTP to avoid this per-client cost.
 
+- Shared low-memory daemons attached with `browserUrl` or `wsEndpoint`
+  disconnect from Chrome after 15 minutes without a queued or running tool
+  call. Chrome stays running; the next browser call reconnects. Re-list pages
+  after reconnection because page IDs and snapshots can change. Traces,
+  screencasts, dialogs and isolated contexts prevent idle disconnect.
+  Requesting emulation, logpoints or WebAuthn disables idle disconnect for
+  that daemon lifetime to preserve state. This releases debugger attachment
+  so a tab-discard extension can make its own independent safety decision.
 - Page discovery does not initialize the selected page until a tool uses it.
   Enabling WebMCP or third-party tool discovery requires initialization.
 - Each initialized page retains one navigation, 100 network requests and

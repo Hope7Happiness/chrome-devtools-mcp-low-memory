@@ -29,7 +29,11 @@ import type {ToolCategory} from '../src/tools/categories.js';
 import type {ToolDefinition} from '../src/tools/ToolDefinition.js';
 import {saveLogsToFile} from '../src/utils/logger.js';
 
-import {createMockMcpContext, createMockPuppeteerBrowser} from './mocks.js';
+import {
+  createMockMcpContext,
+  createMockMcpPage,
+  createMockPuppeteerBrowser,
+} from './mocks.js';
 import {createTempFile} from './utils.js';
 
 describe('McpServer', () => {
@@ -99,6 +103,115 @@ describe('McpServer', () => {
     const tools = await listServerTools(server);
     return tools.map(tool => tool.name);
   }
+
+  it('releases an attached idle browser only after fifteen minutes', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager, context} = await createTestServer([
+      '--lowMemory',
+      '--browser-url=http://127.0.0.1:9223',
+    ]);
+    try {
+      clock.setSystemTime(Date.now() + 899_999);
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      sinon.assert.notCalled(browserManager.close);
+      clock.setSystemTime(Date.now() + 1);
+      assert.strictEqual(await server.releaseIdleBrowser(), true);
+      sinon.assert.calledOnceWithExactly(browserManager.close);
+      sinon.assert.calledOnceWithExactly(context.dispose);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('never closes a launched browser for idle release', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager} = await createTestServer(['--lowMemory']);
+    try {
+      clock.setSystemTime(Date.now() + 900_000);
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      sinon.assert.notCalled(browserManager.close);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('preserves an idle browser with active trace', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager, context} = await createTestServer([
+      '--lowMemory',
+      '--browser-url=http://127.0.0.1:9223',
+    ]);
+    const page = createMockMcpPage();
+    context.getPages.returns([page]);
+    page.isRunningPerformanceTrace.returns(true);
+    try {
+      clock.setSystemTime(Date.now() + 900_000);
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      sinon.assert.notCalled(browserManager.close);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('does not release during a shared call and restarts its idle clock', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager} = await createTestServer([
+      '--lowMemory',
+      '--browser-url=http://127.0.0.1:9223',
+    ]);
+    const deferred =
+      Promise.withResolvers<Awaited<ReturnType<McpServer['callTool']>>>();
+    sinon.stub(server, 'callTool').returns(deferred.promise);
+    const call = server.callToolForClient('test', 'list_pages');
+    try {
+      clock.setSystemTime(Date.now() + 900_000);
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      sinon.assert.notCalled(browserManager.close);
+      deferred.resolve({content: []});
+      await call;
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      clock.setSystemTime(Date.now() + 900_000);
+      assert.strictEqual(await server.releaseIdleBrowser(), true);
+    } finally {
+      deferred.resolve({content: []});
+      await call;
+      await server.close();
+    }
+  });
+
+  it('preserves persistent emulation state after shared calls', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager} = await createTestServer([
+      '--lowMemory',
+      '--browser-url=http://127.0.0.1:9223',
+    ]);
+    sinon.stub(server, 'callTool').resolves({content: []});
+    try {
+      await server.callToolForClient('test', 'emulate');
+      clock.setSystemTime(Date.now() + 900_000);
+      assert.strictEqual(await server.releaseIdleBrowser(), false);
+      sinon.assert.notCalled(browserManager.close);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('retries idle release after a disconnect failure', async () => {
+    const clock = sinon.useFakeTimers({toFake: ['Date']});
+    const {server, browserManager} = await createTestServer([
+      '--lowMemory',
+      '--browser-url=http://127.0.0.1:9223',
+    ]);
+    browserManager.close.onFirstCall().rejects(new Error('disconnect failed'));
+    try {
+      clock.setSystemTime(Date.now() + 900_000);
+      await assert.rejects(server.releaseIdleBrowser(), /disconnect failed/);
+      assert.strictEqual(await server.releaseIdleBrowser(), true);
+      sinon.assert.calledTwice(browserManager.close);
+    } finally {
+      await server.close();
+    }
+  });
 
   it('lists the same enabled tool schemas for shared and native clients', async () => {
     const {server} = await createTestServer(['--slim']);

@@ -145,6 +145,7 @@ let mcpServer: McpServer | null = null;
 let server: Server | null = null;
 let httpService: SharedHttpService | undefined;
 let httpTokenFile: string | undefined;
+let idleBrowserTimer: ReturnType<typeof setInterval> | undefined;
 
 async function setupMCPServer(): Promise<void> {
   logger?.(`Starting Chrome DevTools MCP Server v${VERSION}`);
@@ -159,6 +160,14 @@ async function setupMCPServer(): Promise<void> {
     browserManager,
     logFile,
   });
+  if (args.lowMemory && (args.browserUrl || args.wsEndpoint)) {
+    idleBrowserTimer = setInterval(() => {
+      void mcpServer?.releaseIdleBrowser().catch(error => {
+        logger?.('Idle browser release failed', error);
+      });
+    }, 30_000);
+    idleBrowserTimer.unref();
+  }
   if (args.sharedHttpPort !== undefined) {
     httpTokenFile = path.join(getStateHome(sessionId), 'http-token');
     httpService = await startSharedHttp({
@@ -320,6 +329,7 @@ async function cleanup(exitCode = 0): Promise<void> {
   }
   isCleaningUp = true;
   console.log('Cleaning up daemon...');
+  clearInterval(idleBrowserTimer);
 
   try {
     await httpService?.close();
