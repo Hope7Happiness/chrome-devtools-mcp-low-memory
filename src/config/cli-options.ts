@@ -1555,7 +1555,7 @@ export const commands: Commands = {
         name: 'background',
         type: 'boolean',
         description:
-          'Whether to open the page in the background without bringing it to the front. Default is false (foreground).',
+          'Whether to open the page in the background without bringing it to the front. Default is true (background); pass false to explicitly request foreground activation.',
         required: false,
         positional: false,
       },
@@ -1892,7 +1892,8 @@ export const commands: Commands = {
       bringToFront: {
         name: 'bringToFront',
         type: 'boolean',
-        description: 'Whether to focus the page and bring it to the top.',
+        description:
+          'Whether to focus the page and bring it to the top. Default is false; pass true to explicitly request foreground activation.',
         required: false,
         positional: false,
       },

@@ -87,7 +87,7 @@ describe('McpContext', () => {
       assert.strictEqual(context.getSelectedMcpPage().pptrPage, fallbackPage);
       focusStates.push(await fallbackPage.evaluate(() => document.hasFocus()));
 
-      const createdPage = await context.newPage(true);
+      const createdPage = await context.newPage();
       focusStates.push(
         await createdPage.pptrPage.evaluate(() => document.hasFocus()),
         await fallbackPage.evaluate(() => document.hasFocus()),

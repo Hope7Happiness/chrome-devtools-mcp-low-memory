@@ -56,7 +56,9 @@ export const selectPage: ToolFactory = defineTool((args: ParsedArguments) => ({
     bringToFront: zod
       .boolean()
       .optional()
-      .describe('Whether to focus the page and bring it to the top.'),
+      .describe(
+        'Whether to focus the page and bring it to the top. Default is false; pass true to explicitly request foreground activation.',
+      ),
   },
   blockedByDialog: false,
   concurrency: 'exclusive',
@@ -118,7 +120,7 @@ export const newPage: ToolFactory = defineTool((args: ParsedArguments) => {
         .boolean()
         .optional()
         .describe(
-          'Whether to open the page in the background without bringing it to the front. Default is false (foreground).',
+          'Whether to open the page in the background without bringing it to the front. Default is true (background); pass false to explicitly request foreground activation.',
         ),
       isolatedContext: zod
         .string()
@@ -147,7 +149,7 @@ export const newPage: ToolFactory = defineTool((args: ParsedArguments) => {
         // Nothing is selected, so there is no selection to restore on failure.
       }
       const page = await context.newPage(
-        request.params.background,
+        request.params.background ?? true,
         request.params.isolatedContext,
       );
 

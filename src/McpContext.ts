@@ -583,7 +583,7 @@ export class McpContext implements Context, BrowserlessContext {
   }
 
   async newPage(
-    background?: boolean,
+    background = true,
     isolatedContextName?: string,
   ): Promise<McpPage> {
     let page: Page;

@@ -301,3 +301,13 @@ For a reference implementation, see the [Gemini CLI browser agent documentation]
 [slim-tool-reference]: ./docs/slim-tool-reference.md
 [tool-reference]: ./docs/tool-reference.md
 [troubleshooting]: ./docs/troubleshooting.md
+
+### Background operation by default
+
+New tabs open in the background when `new_page.background` is omitted, including
+isolated contexts. Pass `background: false` to explicitly open in the foreground.
+Selecting a page also stays in the background; use
+`select_page({pageId, bringToFront: true})` to activate it. Other existing-page
+tools do not bring tabs to the front. Focus emulation enables background input
+without activating the browser window. Site-created popups, native dialogs and
+starting a browser can still follow browser or operating-system focus behavior.

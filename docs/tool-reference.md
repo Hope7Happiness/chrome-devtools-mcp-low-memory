@@ -247,7 +247,7 @@
 **Parameters:**
 
 - **url** (string) **(required)**: URL to load in a new page.
-- **background** (boolean) _(optional)_: Whether to open the page in the background without bringing it to the front. Default is false (foreground).
+- **background** (boolean) _(optional)_: Whether to open the page in the background without bringing it to the front. Default is true (background); pass false to explicitly request foreground activation.
 - **isolatedContext** (string) _(optional)_: If specified, the page is created in an isolated browser context with the given name. Pages in the same browser context share cookies and storage. Pages in different browser contexts are fully isolated (useful for clean-slate testing of cookies and authentication).
 - **timeout** (integer) _(optional)_: Maximum wait time in milliseconds. If set to 0, the default timeout will be used.
 
@@ -260,7 +260,7 @@
 **Parameters:**
 
 - **pageId** (number) **(required)**: The ID of the page to select. Call [`list_pages`](#list_pages) to get available pages.
-- **bringToFront** (boolean) _(optional)_: Whether to focus the page and bring it to the top.
+- **bringToFront** (boolean) _(optional)_: Whether to focus the page and bring it to the top. Default is false; pass true to explicitly request foreground activation.
 
 ---
 

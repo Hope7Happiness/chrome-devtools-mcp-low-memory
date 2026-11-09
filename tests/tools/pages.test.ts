@@ -232,6 +232,25 @@ describe('pages', () => {
     });
   });
   describe('new_page', () => {
+    for (const isolatedContext of [undefined, 'background-context']) {
+      for (const background of [undefined, true, false]) {
+        it(`uses background=${background ?? true} when requested=${background} in context=${isolatedContext}`, async () => {
+          const {page, context, response, args} = createHandlerMocks();
+          context.newPage.resolves(page);
+          await newPage(args).handler(
+            {params: {url: 'https://example.com', background, isolatedContext}},
+            response,
+            context,
+          );
+          sinon.assert.calledOnceWithExactly(
+            context.newPage,
+            background ?? true,
+            isolatedContext,
+          );
+          sinon.assert.notCalled(page.pptrPage.bringToFront);
+        });
+      }
+    }
     it('sets the selected page and response flags', async () => {
       const {page, context, response, args} = createHandlerMocks();
       context.newPage.resolves(page);
@@ -242,7 +261,7 @@ describe('pages', () => {
         context,
       );
 
-      sinon.assert.calledOnceWithExactly(context.newPage, undefined, undefined);
+      sinon.assert.calledOnceWithExactly(context.newPage, true, undefined);
       sinon.assert.calledOnceWithExactly(
         page.pptrPage.goto,
         'https://example.com',
@@ -511,7 +530,7 @@ describe('pages', () => {
         );
       });
     });
-    it('create a page in the background', async () => {
+    it('creates a page in the background by default', async () => {
       await withMcpContext(async (response, context, args) => {
         const originalPage = context.getPageById(1);
         assert.strictEqual(originalPage, context.getSelectedMcpPage());
@@ -522,7 +541,7 @@ describe('pages', () => {
           true,
         );
         await newPage(args).handler(
-          {params: {url: 'data:text/html,<html></html>', background: true}},
+          {params: {url: 'data:text/html,<html></html>'}},
           response,
           context,
         );
@@ -558,7 +577,7 @@ describe('pages', () => {
       });
     });
 
-    it('keeps focus when background is true with isolatedContext', async () => {
+    it('keeps focus by default with isolatedContext', async () => {
       await withMcpContext(async (response, context, args) => {
         const originalPage = context.getPageById(1);
         assert.strictEqual(originalPage, context.getSelectedMcpPage());
@@ -572,7 +591,6 @@ describe('pages', () => {
           {
             params: {
               url: 'data:text/html,<html></html>',
-              background: true,
               isolatedContext: 'session-a',
             },
           },
@@ -842,6 +860,28 @@ describe('pages', () => {
     });
   });
   describe('select_page', () => {
+    for (const bringToFront of [undefined, false]) {
+      it(`does not activate the page when bringToFront=${bringToFront}`, async () => {
+        const {page, context, response, args} = createHandlerMocks();
+        context.getPageById.withArgs(1).returns(page);
+        await selectPage(args).handler(
+          {params: {pageId: 1, bringToFront}},
+          response,
+          context,
+        );
+        sinon.assert.notCalled(page.pptrPage.bringToFront);
+      });
+    }
+    it('activates the page when explicitly requested', async () => {
+      const {page, context, response, args} = createHandlerMocks();
+      context.getPageById.withArgs(1).returns(page);
+      await selectPage(args).handler(
+        {params: {pageId: 1, bringToFront: true}},
+        response,
+        context,
+      );
+      sinon.assert.calledOnceWithExactly(page.pptrPage.bringToFront);
+    });
     it('sets the selected page and response flags', async () => {
       const {page, context, response, args} = createHandlerMocks();
       context.getPageById.withArgs(1).returns(page);
